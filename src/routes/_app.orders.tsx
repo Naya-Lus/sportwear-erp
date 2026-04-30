@@ -7,6 +7,7 @@ import {
   listOrders,
   listCustomers,
   listProducts,
+  listUsers,
   createOrder,
   updateOrderStatus,
   createCustomer,
@@ -274,7 +275,9 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
   const { user } = useAuth();
   const [customers, setCustomers] = useState<DbCustomer[]>([]);
   const [products, setProducts] = useState<DbProduct[]>([]);
+  const [users, setUsers] = useState<{ user_id: string; full_name: string; email: string; role: string }[]>([]);
   const [customerId, setCustomerId] = useState("");
+  const [createdBy, setCreatedBy] = useState(user?.user_id ?? "");
   const [items, setItems] = useState<OrderItemDraft[]>([{ product_id: "", quantity: 1, unit_price: 0 }]);
   const [saving, setSaving] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
@@ -282,15 +285,19 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [newCust, setNewCust] = useState({ full_name: "", email: "", phone: "", address: "" });
 
   useEffect(() => {
-    Promise.all([listCustomers(), listProducts()])
-      .then(([c, p]) => {
+    Promise.all([listCustomers(), listProducts(), listUsers()])
+      .then(([c, p, u]) => {
         setCustomers(c);
         setProducts(p);
+        setUsers(u);
         if (p.length > 0) setItems([{ product_id: p[0].product_id, quantity: 1, unit_price: p[0].price }]);
+        // Default to logged-in user if they exist in DB, otherwise first user
+        const match = u.find((dbUser) => dbUser.user_id === user?.user_id);
+        setCreatedBy(match ? match.user_id : (u[0]?.user_id ?? ""));
       })
       .catch(() => toast.error("Failed to load data"))
       .finally(() => setLoadingData(false));
-  }, []);
+  }, [user?.user_id]);
 
   const setItem = (idx: number, patch: Partial<OrderItemDraft>) => {
     setItems((prev) => prev.map((it, i) => {
@@ -326,12 +333,13 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
 
   const submit = async () => {
     if (!customerId) { toast.error("Select a customer"); return; }
+    if (!createdBy) { toast.error("Select a user"); return; }
     if (items.some((it) => !it.product_id || it.quantity < 1)) { toast.error("Fill all item fields"); return; }
     setSaving(true);
     try {
       await createOrder({
         customer_id: customerId,
-        created_by: user?.user_id ?? "00000000-0000-0000-0000-000000000000",
+        created_by: createdBy,
         items,
       });
       toast.success("Order created — now click Confirm to trigger invoice & inventory");
@@ -362,6 +370,18 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
             <p className="text-center text-sm text-muted-foreground py-8">Loading from Supabase…</p>
           ) : (
             <>
+              {/* Created by */}
+              <Field label="Created by">
+                <select value={createdBy} onChange={(e) => setCreatedBy(e.target.value)} className={inputCls}>
+                  <option value="">— Select user —</option>
+                  {users.map((u) => (
+                    <option key={u.user_id} value={u.user_id}>
+                      {u.full_name} ({u.role})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
               {/* Customer */}
               <div>
                 <Field label="Customer">

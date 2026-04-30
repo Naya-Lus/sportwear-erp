@@ -8,9 +8,6 @@ import type {
   DbProduct,
   DbInventory,
   DbOrder,
-  DbOrderItem,
-  DbInvoice,
-  DbPayment,
   OrderWithCustomer,
   OrderItemWithProduct,
   InvoiceWithOrder,
@@ -142,8 +139,9 @@ export async function createOrder(
   if (orderErr) throw orderErr;
 
   // 2. Insert order items
+  const orderId = (order as DbOrder).order_id;
   const itemRows = input.items.map((i) => ({
-    order_id: (order as DbOrder).order_id,
+    order_id: orderId,
     product_id: i.product_id,
     quantity: i.quantity,
     unit_price: i.unit_price,
@@ -155,7 +153,7 @@ export async function createOrder(
     .insert(itemRows);
   if (itemsErr) throw itemsErr;
 
-  return getOrder((order as DbOrder).order_id);
+  return getOrder(orderId);
 }
 
 export async function updateOrderStatus(
